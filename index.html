@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Rúbricas de Evaluación</title>
+    <!-- Librerías Externas -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        :root {
+            /* Paleta de Colores Pastel Azul */
+            --primary-blue: #a2d2ff; 
+            --secondary-blue: #bde0fe;
+            --soft-blue: #eef6ff;
+            --deep-blue: #4a90e2;
+            --success-blue: #8ecae6;
+            --danger-pastel: #ffafcc;
+            --danger-text: #e11d48; /* Rojo para notas bajas */
+            --bg-gradient: linear-gradient(135deg, #f0f7ff 0%, #c9e2ff 100%);
+            --text-dark: #334155;
+            --white: #ffffff;
+        }
+
+        body {
+            box-sizing: border-box;
+            font-family: 'Quicksand', 'Segoe UI', sans-serif;
+            margin: 0;
+            padding: 0;
+            background: var(--bg-gradient);
+            color: var(--text-dark);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 30px 20px;
+            flex-grow: 1;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 2.2rem;
+            color: #1e40af;
+            margin: 0;
+            font-weight: 700;
+        }
+
+        /* Sistema de Pestañas */
+        .tabs {
+            display: flex;
+            background: rgba(255, 255, 255, 0.6);
+            border-radius: 20px 20px 0 0;
+            backdrop-filter: blur(10px);
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.4);
+        }
+
+        .tab {
+            flex: 1;
+            padding: 18px 10px;
+            text-align: center;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            color: #64748b;
+            transition: all 0.4s ease;
+            font-size: 0.85rem;
+            letter-spacing: 1px;
+        }
+
+        .tab.active {
+            background: var(--white);
+            color: var(--deep-blue);
+            box-shadow: 0 -5px 15px rgba(0,0,0,0.05);
+        }
+
+        .content {
+            background: var(--white);
+            border-radius: 0 0 20px 20px;
+            padding: 40px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+            min-height: 500px;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        .tab-content { display: none; animation: fadeIn 0.4s ease; }
+        .tab-content.active { display: block; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Botones */
+        .btn {
+            border: none;
+            padding: 12px 25px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+            font-size: 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn:hover { transform: translateY(-2px); filter: brightness(0.95); }
+        
+        .btn-primary { background: var(--primary-blue); color: #1e40af; }
+        .btn-success { background: var(--success-blue); color: #1e3a8a; }
+        .btn-danger { background: var(--danger-pastel); color: #881337; }
+        .btn-info { background: #e0f2fe; color: #0369a1; }
+
+        .form-group label { display: block; margin-bottom: 10px; font-weight: 600; color: #1e40af; }
+        .form-group textarea, .form-group input {
+            width: 100%; padding: 15px; border: 2px solid #e2e8f0; border-radius: 12px;
+            box-sizing: border-box; font-family: inherit;
+        }
+
+        /* Área de Carga Mejorada */
+        .file-upload-area {
+            border: 3px dashed var(--primary-blue);
+            background: var(--soft-blue);
+            border-radius: 20px;
+            padding: 50px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+        .file-upload-area.drag-over {
+            background: #dbeafe;
+            border-color: var(--deep-blue);
+            transform: scale(1.02);
+        }
+
+        /* Tablas */
+        .rubric-table {
+            width: 100%; border-collapse: separate; border-spacing: 0; margin: 20px 0;
+            border-radius: 15px; overflow: hidden; border: 1px solid #e2e8f0;
+        }
+        .rubric-table th { background: #f1f5f9; color: #1e40af; padding: 15px; text-transform: uppercase; font-size: 0.75rem; }
+        .rubric-table td { padding: 15px; border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; }
+
+        .level-btn {
+            background: #fff; border: 1px solid #e2e8f0; padding: 10px; border-radius: 10px;
+            cursor: pointer; width: 100%; transition: 0.2s; font-size: 0.8rem;
+        }
+        .level-btn.selected { background: var(--primary-blue); border-color: transparent; font-weight: bold; }
+        .level-btn.selected-insufficient { background: var(--danger-pastel); border-color: transparent; font-weight: bold; }
+
+        /* Estilo para notas bajas en análisis */
+        .low-score { color: var(--danger-text) !important; font-weight: 700 !important; }
+
+        /* Análisis */
+        .analysis-card { background: #f8fafc; border-radius: 15px; padding: 25px; margin-bottom: 30px; border: 1px solid #e2e8f0; }
+        .bar-chart { display: flex; flex-direction: column; gap: 15px; }
+        .bar-row { display: flex; align-items: center; gap: 15px; }
+        .bar-label { width: 180px; text-align: right; font-weight: 600; font-size: 0.85rem; color: #64748b; }
+        .bar-wrapper { flex-grow: 1; background: #e2e8f0; border-radius: 10px; height: 20px; position: relative; }
+        .bar-fill { height: 100%; background: var(--primary-blue); border-radius: 10px; transition: width 0.8s ease; }
+        .bar-value { position: absolute; right: 10px; color: #1e40af; font-size: 0.75rem; font-weight: bold; line-height: 20px; }
+
+        /* Footer */
+        footer {
+            margin-top: auto;
+            padding: 40px 20px;
+            text-align: center;
+            background: rgba(255, 255, 255, 0.4);
+            border-top: 1px solid rgba(255, 255, 255, 0.5);
+        }
+        .footer-brand { font-weight: 700; color: #1e40af; margin-bottom: 10px; display: block; }
+        .footer-link {
+            color: #3b82f6; text-decoration: none; font-weight: 600; padding: 8px 20px;
+            border-radius: 50px; background: white; box-shadow: 0 4px 6px rgba(0,0,0,0.05); transition: 0.3s;
+        }
+        .footer-link:hover { background: var(--primary-blue); color: white; }
+
+        /* Modal */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); }
+        .modal-content { background: white; margin: 10% auto; padding: 35px; border-radius: 20px; width: 85%; max-width: 600px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
+        .close { float: right; font-size: 24px; cursor: pointer; color: #64748b; }
+
+        .scrollable-table-container { overflow-x: auto; border-radius: 15px; }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600;700&amp;display=swap" rel="stylesheet">
+<style type="text/css">
+.grande { font-size: 60px; }
+</style>
+<script>
+// Escribir aqui el código Javascript
+</script>
+</head>
+<body>
+
+    <div class="container">
+        <div class="header">
+            <h1>❄️ Gestión de Rúbricas</h1>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('config')">CONFIGURACIÓN</button>
+            <button class="tab" onclick="showTab('class')">EVALUACIÓN</button>
+            <button class="tab" onclick="showTab('analysis')">ANÁLISIS</button>
+            <button class="tab" onclick="showTab('export')">EXPORTAR</button>
+        </div>
+
+        <div class="content">
+            <!-- PESTAÑA CONFIGURACIÓN -->
+            <div id="config" class="tab-content active">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+                    <h2 style="color: #1e40af; margin: 0;">⚙️ Ajustes de Evaluación</h2>
+                    <div>
+                        <button class="btn btn-info" onclick="openModal()">Instrucciones</button>
+                        <button class="btn btn-primary" onclick="loadDemoRubric()">Cargar Demo</button>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Criterio de Evaluación General:</label>
+                    <textarea id="criterio" rows="2" placeholder="Ej: Evaluar la expresión oral y el uso de vocabulario técnico..."></textarea>
+                </div>
+
+                <div class="file-upload-area" id="fileUploadArea">
+                    <div style="font-size: 3rem; margin-bottom: 15px;">📄</div>
+                    <p id="uploadText" style="margin: 0; font-weight: 600;">Arrastra tu rúbrica aquí o haz clic para subir</p>
+                    <p style="font-size: 0.8rem; color: #64748b; margin-top: 10px;">Formatos aceptados: Excel (.xlsx) o Markdown (.md)</p>
+                    <input type="file" id="fileInput" accept=".xlsx,.xls,.md" style="display: none;">
+                </div>
+
+                <div id="rubricDisplay"></div>
+                
+                <div style="text-align: right; margin-top: 25px;">
+                    <button class="btn btn-success" onclick="saveConfig()">Guardar Cambios</button>
+                </div>
+            </div>
+
+            <!-- PESTAÑA EVALUACIÓN -->
+            <div id="class" class="tab-content">
+                <h2 style="color: #1e40af;">👨‍🎓 Evaluar Alumno</h2>
+                <div class="form-group">
+                    <label>Nombre del Alumna/o:</label>
+                    <input type="text" id="studentName" placeholder="Escribe el nombre del estudiante...">
+                </div>
+                <div style="background: #f0f9ff; padding: 15px; border-radius: 12px; margin-bottom: 20px; border-left: 5px solid var(--primary-blue);">
+                    <strong style="color: #0369a1;">Criterio Activo:</strong> <span id="criterioText">No configurado</span>
+                </div>
+                <div class="scrollable-table-container">
+                    <table class="rubric-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 25%;">Indicador</th>
+                                <th>10</th>
+                                <th>8</th>
+                                <th>6</th>
+                                <th>5</th>
+                                <th>1</th>
+                            </tr>
+                        </thead>
+                        <tbody id="evaluationTableBody"></tbody>
+                    </table>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px;">
+                    <div style="background: #f1f5f9; padding: 12px 25px; border-radius: 12px; font-weight: bold;">
+                        Nota Final: <span id="finalScore" style="color: #1e40af; font-size: 1.5rem;">0.0</span>
+                    </div>
+                    <button class="btn btn-success" onclick="saveStudentData()">Registrar Evaluación</button>
+                </div>
+            </div>
+
+            <!-- PESTAÑA ANÁLISIS -->
+            <div id="analysis" class="tab-content">
+                <h2 style="color: #1e40af; margin-bottom: 25px;">📈 Resultados del Grupo</h2>
+                <div id="analysisContent"></div>
+            </div>
+
+            <!-- PESTAÑA EXPORTACIÓN -->
+            <div id="export" class="tab-content">
+                <h2 style="color: #1e40af;">📤 Exportar Datos</h2>
+                <p style="color: #64748b; margin-bottom: 30px;">Descarga los resultados en el formato que prefieras.</p>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div class="analysis-card" style="text-align: center; margin: 0;">
+                        <h3>📊 CSV para Excel</h3>
+                        <p style="font-size: 0.85rem;">Exporta los datos puros para análisis estadístico.</p>
+                        <button class="btn btn-primary" onclick="exportToCSV()">Descargar CSV</button>
+                    </div>
+                    <div class="analysis-card" style="text-align: center; margin: 0;">
+                        <h3>📄 Informe en PDF</h3>
+                        <p style="font-size: 0.85rem;">Documento listo para imprimir con gráficos y detalles.</p>
+                        <button class="btn btn-success" onclick="exportToPDF()">Descargar PDF</button>
+                    </div>
+                </div>
+                <div style="margin-top: 50px; text-align: center;">
+                    <button class="btn btn-danger" onclick="clearAllData()">Borrar todos los registros</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Instrucciones Actualizado -->
+    <div id="instruccionesModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">×</span>
+            <h2 style="color: #1e40af; margin-top: 0;">📖 Instrucciones de Uso</h2>
+            <div style="line-height: 1.6; color: #475569;">
+                <p><strong>1. Configuración:</strong> Define tu criterio de evaluación y carga tu rúbrica. Puedes arrastrar un Excel donde la 1ª columna sea el indicador y las siguientes los niveles de logro.</p>
+                <p><strong>2. Evaluación:</strong> En la pestaña "EVALUACIÓN", introduce el nombre del alumno y haz clic sobre el nivel alcanzado en cada indicador. La nota se calcula automáticamente.</p>
+                <p><strong>3. Análisis:</strong> Revisa el progreso grupal. Las notas <strong>inferiores a 5</strong> se resaltarán en rojo para su fácil identificación.</p>
+                <p><strong>4. Exportación:</strong> Genera informes profesionales en PDF con el desglose pormenorizado de cada calificación.</p>
+            </div>
+            <button class="btn btn-primary" style="width: 100%; justify-content: center; margin-top: 20px;" onclick="closeModal()">Entendido</button>
+        </div>
+    </div>
+
+    <footer>
+        <div class="footer-brand">Gestión de Rúbricas Docentes</div>
+        <a href="https://blogsaverroes.juntadeandalucia.es/ellocodelamochila/" class="footer-link" target="_blank">
+            El loco de la mochila
+        </a>
+    </footer>
+
+    <script>
+        let currentScores = [];
+        let studentsData = JSON.parse(localStorage.getItem('studentsData')) || [];
+        let currentRubric = JSON.parse(localStorage.getItem('currentRubric')) || null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            setupDragAndDrop();
+            loadConfig();
+            if (currentRubric) renderAll();
+        });
+
+        function showTab(name) {
+            document.querySelectorAll('.tab-content, .tab').forEach(el => el.classList.remove('active'));
+            document.getElementById(name).classList.add('active');
+            event.currentTarget.classList.add('active');
+            if (name === 'analysis') updateAnalysis();
+        }
+
+        function openModal() { document.getElementById('instruccionesModal').style.display = 'block'; }
+        function closeModal() { document.getElementById('instruccionesModal').style.display = 'none'; }
+
+        // Gestión de Arrastre Mejorada
+        function setupDragAndDrop() {
+            const area = document.getElementById('fileUploadArea');
+            const input = document.getElementById('fileInput');
+
+            area.onclick = () => input.click();
+
+            area.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                area.classList.add('drag-over');
+            });
+
+            area.addEventListener('dragleave', () => {
+                area.classList.remove('drag-over');
+            });
+
+            area.addEventListener('drop', (e) => {
+                e.preventDefault();
+                area.classList.remove('drag-over');
+                const file = e.dataTransfer.files[0];
+                if (file) handleFile(file);
+            });
+
+            input.onchange = (e) => handleFile(e.target.files[0]);
+        }
+
+        function handleFile(file) {
+            const reader = new FileReader();
+            const ext = file.name.split('.').pop().toLowerCase();
+            document.getElementById('uploadText').innerText = "Archivo cargado: " + file.name;
+            
+            reader.onload = (e) => {
+                const data = e.target.result;
+                let raw;
+                if (ext === 'md') {
+                    raw = data.split('\n').filter(r => r.includes('|') && !r.includes('---')).map(r => r.split('|').slice(1,-1).map(c => c.trim()));
+                } else {
+                    const wb = XLSX.read(data, {type: 'array'});
+                    raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header: 1});
+                }
+                processRawRubric(raw, file.name);
+            };
+            ext === 'md' ? reader.readAsText(file) : reader.readAsArrayBuffer(file);
+        }
+
+        function processRawRubric(raw, name) {
+            // Filtrar filas vacías o que no tengan nombre de indicador para evitar la fila errónea al final
+            const criteria = raw.slice(1).map(row => {
+                if (!row[0] || row[0].toString().trim() === "") return null;
+                return { 
+                    name: row[0].toString().trim(), 
+                    sobresaliente: (row[1] || "").toString().trim(), 
+                    notable: (row[2] || "").toString().trim(), 
+                    bien: (row[3] || "").toString().trim(), 
+                    suficiente: (row[4] || "").toString().trim(), 
+                    insuficiente: (row[5] || "").toString().trim() 
+                };
+            }).filter(Boolean);
+
+            if (criteria.length === 0) {
+                alert("No se detectaron indicadores válidos en el archivo.");
+                return;
+            }
+
+            currentRubric = { title: name, criteria };
+            localStorage.setItem('currentRubric', JSON.stringify(currentRubric));
+            renderAll();
+        }
+
+        function loadDemoRubric() {
+            currentRubric = {
+                title: "Exposición Oral (Demo)",
+                criteria: [
+                    { name: "Contenido", sobresaliente: "Dominio total", notable: "Buen dominio", bien: "Aceptable", suficiente: "Poco claro", insuficiente: "No sabe" },
+                    { name: "Postura", sobresaliente: "Muy profesional", notable: "Correcta", bien: "Mejorable", suficiente: "Rígida", insuficiente: "Inapropiada" },
+                    { name: "Voz", sobresaliente: "Clara y potente", notable: "Audible", bien: "Baja", suficiente: "Monótona", insuficiente: "No se oye" }
+                ]
+            };
+            localStorage.setItem('currentRubric', JSON.stringify(currentRubric));
+            renderAll();
+        }
+
+        function renderAll() {
+            displayRubric(currentRubric);
+            updateClassTable(currentRubric);
+        }
+
+        function displayRubric(rubric) {
+            document.getElementById('rubricDisplay').innerHTML = `
+                <h4 style="margin-top:25px; color:#1e40af;">Previsualización: ${rubric.title}</h4>
+                <div class="scrollable-table-container">
+                    <table class="rubric-table" style="font-size:0.8rem">
+                        <thead><tr><th>Indicador</th><th>10</th><th>8</th><th>6</th><th>5</th><th>1</th></tr></thead>
+                        <tbody>${rubric.criteria.map(c => `<tr><td>${c.name}</td><td>${c.sobresaliente}</td><td>${c.notable}</td><td>${c.bien}</td><td>${c.suficiente}</td><td>${c.insuficiente}</td></tr>`).join('')}</tbody>
+                    </table>
+                </div>`;
+        }
+
+        function updateClassTable(rubric) {
+            const body = document.getElementById('evaluationTableBody');
+            body.innerHTML = rubric.criteria.map((c, i) => `
+                <tr>
+                    <td><strong>${c.name}</strong></td>
+                    <td><button class="level-btn" onclick="setScore(${i}, 10, this, false)">${c.sobresaliente || "10"}</button></td>
+                    <td><button class="level-btn" onclick="setScore(${i}, 8, this, false)">${c.notable || "8"}</button></td>
+                    <td><button class="level-btn" onclick="setScore(${i}, 6, this, false)">${c.bien || "6"}</button></td>
+                    <td><button class="level-btn" onclick="setScore(${i}, 5, this, false)">${c.suficiente || "5"}</button></td>
+                    <td><button class="level-btn" onclick="setScore(${i}, 1, this, true)">${c.insuficiente || "1"}</button></td>
+                </tr>
+            `).join('');
+            currentScores = new Array(rubric.criteria.length).fill(0);
+        }
+
+        function setScore(idx, val, btn, isInsufficient) {
+            currentScores[idx] = val;
+            const rowButtons = btn.closest('tr').querySelectorAll('.level-btn');
+            rowButtons.forEach(b => b.className = 'level-btn');
+            btn.classList.add(isInsufficient ? 'selected-insufficient' : 'selected');
+            const avg = currentScores.reduce((a,b) => a+b, 0) / currentScores.length;
+            document.getElementById('finalScore').innerText = avg.toFixed(1);
+        }
+
+        function saveStudentData() {
+            const name = document.getElementById('studentName').value.trim();
+            if (!name || currentScores.includes(0)) return alert("Completa el nombre y evalúa todos los indicadores.");
+            studentsData.push({ name, scores: [...currentScores], finalScore: parseFloat(document.getElementById('finalScore').innerText) });
+            localStorage.setItem('studentsData', JSON.stringify(studentsData));
+            document.getElementById('studentName').value = '';
+            updateClassTable(currentRubric);
+            document.getElementById('finalScore').innerText = '0.0';
+            alert("¡Evaluación guardada con éxito!");
+        }
+
+        function updateAnalysis() {
+            const cont = document.getElementById('analysisContent');
+            if (!studentsData.length || !currentRubric) return cont.innerHTML = '<div class="analysis-card"><p>No hay datos registrados aún. Realiza algunas evaluaciones primero.</p></div>';
+            
+            const indicators = currentRubric.criteria.map(c => c.name);
+            const avgs = indicators.map((_, i) => studentsData.reduce((acc, s) => acc + s.scores[i], 0) / studentsData.length);
+            
+            let html = `
+                <div class="analysis-card">
+                    <h3>📊 Medias del Grupo por Indicador</h3>
+                    <div class="bar-chart">
+                        ${avgs.map((a, i) => `
+                            <div class="bar-row">
+                                <div class="bar-label">${indicators[i]}</div>
+                                <div class="bar-wrapper">
+                                    <div class="bar-fill" style="width:${a*10}%"></div>
+                                    <span class="bar-value ${a < 5 ? 'low-score' : ''}">${a.toFixed(1)}</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+                <div class="analysis-card">
+                    <h3>📋 Registro Detallado</h3>
+                    <div class="scrollable-table-container">
+                        <table class="rubric-table">
+                            <thead>
+                                <tr>
+                                    <th>Alumno</th>
+                                    ${indicators.map(n => `<th>${n}</th>`).join('')}
+                                    <th style="background:#dbeafe">Media</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${studentsData.map(s => `
+                                    <tr>
+                                        <td style="font-weight:bold;">${s.name}</td>
+                                        ${s.scores.map(v => `<td style="text-align:center;" class="${v < 5 ? 'low-score' : ''}">${v}</td>`).join('')}
+                                        <td style="text-align:center; font-weight:bold; color:#1e40af;" class="${s.finalScore < 5 ? 'low-score' : ''}">${s.finalScore.toFixed(1)}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>`;
+            cont.innerHTML = html;
+        }
+
+        function saveConfig() {
+            const val = document.getElementById('criterio').value;
+            localStorage.setItem('criterio', val);
+            document.getElementById('criterioText').innerText = val || 'Sin configurar';
+            alert("Configuración guardada.");
+        }
+
+        function loadConfig() {
+            const c = localStorage.getItem('criterio');
+            if (c) { document.getElementById('criterio').value = c; document.getElementById('criterioText').innerText = c; }
+        }
+
+        function exportToCSV() {
+            if (!studentsData.length) return alert("No hay datos para exportar.");
+            const indicators = currentRubric.criteria.map(c => c.name);
+            let csv = "Alumno," + indicators.join(",") + ",Media\n";
+            studentsData.forEach(s => csv += `"${s.name}",${s.scores.join(",")},${s.finalScore}\n`);
+            const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = 'calificaciones.csv'; link.click();
+        }
+
+        function exportToPDF() {
+            if (!studentsData.length) return alert("No hay datos para exportar.");
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('l', 'mm', 'a4');
+            const indicators = currentRubric.criteria.map(c => c.name);
+            
+            doc.setFillColor(162, 210, 255); doc.rect(0, 0, 297, 210, 'F');
+            doc.setTextColor(30, 64, 175); doc.setFontSize(28); doc.text("Informe de Evaluación", 148.5, 95, {align:'center'});
+            doc.setFontSize(14); doc.text(currentRubric.title, 148.5, 110, {align:'center'});
+            doc.text('Generado por "El loco de la mochila"', 148.5, 190, {align:'center'});
+            
+            doc.addPage();
+            doc.setTextColor(0); doc.setFontSize(16); doc.text("Detalle de Calificaciones Individuales", 14, 20);
+            doc.autoTable({
+                startY: 25,
+                head: [['Alumno', ...indicators, 'Media']],
+                body: studentsData.map(s => [s.name, ...s.scores, s.finalScore.toFixed(2)]),
+                headStyles: { fillColor: [162, 210, 255], textColor: [30, 64, 175] },
+                styles: { fontSize: 8 },
+                didParseCell: function(data) {
+                    if (data.column.index > 0 && parseFloat(data.cell.raw) < 5) {
+                        data.cell.styles.textColor = [225, 29, 72]; // Rojo en PDF
+                        data.cell.styles.fontStyle = 'bold';
+                    }
+                }
+            });
+            doc.save('Informe_Rubrica_Azul.pdf');
+        }
+
+        function clearAllData() { if(confirm("¿Estás seguro? Se borrarán todos los alumnos y la rúbrica.")) { localStorage.clear(); location.reload(); } }
+    </script>
+
+
+</body></html>
